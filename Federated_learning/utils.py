@@ -66,7 +66,7 @@ def make_logdir(args: dict):
     mode = args.mode
     sketch_str = f"{mode}: {rows} x {cols}" if mode == "sketch" else f"{mode}"
     k_str = f"k: {k}" if mode in [
-        "sketch", "true_topk", "local_topk", "sampling"] else ""
+        "sketch", "true_topk", "local_topk", "sampling", "nips"] else ""
     workers = args.num_workers
     clients = args.num_clients
     clients_str = f"{workers}/{clients}"
@@ -123,7 +123,7 @@ def parse_args(default_lr=None):
     # meta-args
     parser.add_argument("--test", action="store_true", dest="do_test")
     modes = ["sketch", "true_topk", "local_topk",
-             "sampling", "fedavg", "uncompressed"]
+             "sampling", "fedavg", "uncompressed", "nips"]
     parser.add_argument("--mode", choices=modes, default="sketch")
     parser.add_argument("--tensorboard", dest="use_tensorboard",
                         action="store_true")
@@ -275,6 +275,9 @@ def _topk(vec, k):
     elif len(vec.size()) == 2:
         rows = torch.arange(vec.size()[0]).view(-1, 1)
         ret[rows, topkIndices] = vec[rows, topkIndices]
+
+    # print("topk count", torch.sum(ret!=0))
+
     return ret
 
 
@@ -294,8 +297,35 @@ def _sampling(grad, k):
     w_e = torch.where(w_e.isinf(), torch.zeros_like(grad), w_e)
     w_e = torch.where(w_e.isnan(), torch.zeros_like(grad), w_e)
 
+    # print("sampling count", torch.sum(w_e!=0), torch.sum(w_r!=0), torch.sum(randv[0:10]))
+
     return torch.cat((w_e, w_e.abs(), w_r.abs(), torch.unsqueeze(C, 0)))
 
+def _nips(vec, k):
+    p0 = k / vec.abs().sum() * vec.abs()
+    p1 = torch.where(p0 < 1, torch.zeros_like(p0), torch.ones_like(p0))
+    p0 = torch.where(p0 < 1, p0, torch.zeros_like(p0))
+
+    p0 = p0 * (k - p1.sum()) / p0.sum()
+    p2 = torch.where(p0 < 1, torch.zeros_like(p0), torch.ones_like(p0))
+    p0 = torch.where(p0 < 1, p0, torch.zeros_like(p0))
+
+    p0 = p0 * (k - p1.sum() - p2.sum()) / p0.sum()
+    p3 = torch.where(p0 < 1, torch.zeros_like(p0), torch.ones_like(p0))
+    p0 = torch.where(p0 < 1, p0, torch.zeros_like(p0))
+
+    p = p1 + p2 + p3 + p0
+
+    randv = torch.rand_like(vec).cuda()
+
+    w = torch.where(randv < p, vec / p, torch.zeros_like(p))
+
+    w = torch.where(w.isinf(), torch.zeros_like(vec), w)
+    w = torch.where(w.isnan(), torch.zeros_like(vec), w)
+
+    # print("nips count", torch.sum(w!=0))
+
+    return w
 
 def get_grad(model, args):
     weights = get_param_vec(model)

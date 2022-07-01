@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import ctypes
-from utils import get_param_vec, set_param_vec, get_grad, _topk, _sampling, clip_grad
+from utils import get_param_vec, set_param_vec, get_grad, _topk, _sampling, clip_grad, _nips
 import copy
 import os
 import time
@@ -18,6 +18,7 @@ def worker_loop(input_model, ps_weights, client_weights, client_errors,
                 rank, world_size, compute_loss_train, compute_loss_val,
                 args):
     torch.cuda.set_device(rank - 1)
+    torch.random.manual_seed(args.seed)
 
     model = input_model.to(args.device)
 
@@ -43,7 +44,7 @@ def worker_loop(input_model, ps_weights, client_weights, client_errors,
         local_ps_weights = ps_weights.clone().to(args.device)
 
         # sum the gradient over all batches
-        if args.mode in ["uncompressed", "true_topk",
+        if args.mode in ["uncompressed", "true_topk", "nips",
                          "local_topk", "fedavg"]:
             shape = (args.grad_size,)
         elif args.mode == "sampling":
@@ -63,6 +64,7 @@ def worker_loop(input_model, ps_weights, client_weights, client_errors,
         # loop over workers we have to process (see comment above)
 
         # print(len(batches), '.')
+        # print("test random", torch.rand(1))
         for batch in batches:
             print('.', end='', flush=True)
             if args.mode == "fedavg" and is_train:
@@ -249,7 +251,18 @@ def local_step(model, velocity, error, batch, compute_loss, args):
 
         if args.local_momentum > 0:
             velocity[nz] = 0
+    
+    if args.mode == "nips":
+        assert args.error_type in ["local", "none"]
+        to_transmit = _nips(to_transmit.to(args.device), k=args.k)
 
+        nz = to_transmit.nonzero()
+        if error is not None:
+            error[nz] = 0
+
+        if args.local_momentum > 0:
+            velocity[nz] = 0
+    
     # sketched sgd with local error accumulation doesn't really make
     # sense, since when we send a sketch we don't know what portion
     # of the sketch is the "error"
@@ -370,6 +383,8 @@ def forward_grad(model, batch, compute_loss, args, compute_grad=True):
         # logic for doing fedavg happens in process_batch
         g = grad
     elif args.mode == "uncompressed":
+        g = grad
+    elif args.mode == "nips":
         g = grad
 
     return g, results

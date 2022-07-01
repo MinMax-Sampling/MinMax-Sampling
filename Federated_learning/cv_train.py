@@ -215,24 +215,25 @@ def run_batches(model, opt, lr_scheduler, loader, val_loader,
                               args.num_workers)
 
         ################################################################################
-        val_fraction = 0
-        val_steps = 0.02
+        # val_fraction = 0
+        # val_steps = 0.02
         ################################################################################
 
+        print("loader", len(loader))
         for i, batch in enumerate(loader):
             # only carry out an epoch_fraction portion of the epoch
             batch_time = time.time()
             if i > spe * epoch_fraction:
                 break
             ################################################################################
-            if i >= spe * val_fraction:
-                model.train(False)
-                val_loss, val_acc, _, _ = run_batches(
-                    model, None, None, val_loader, None, False, 1, args
-                )
-                model.train(True)
-                print("validation", val_fraction, val_loss, val_acc)
-                val_fraction += val_steps
+            # if i >= spe * val_fraction:
+            #     model.train(False)
+            #     val_loss, val_acc, _, _ = run_batches(
+            #         model, None, None, val_loader, None, False, 1, args
+            #     )
+            #     model.train(True)
+            #     print("validation", val_fraction, val_loss, val_acc)
+            #     val_fraction += val_steps
             ################################################################################
                 
             # print(np.bincount(batch[-1]))
@@ -258,7 +259,8 @@ def run_batches(model, opt, lr_scheduler, loader, val_loader,
                     msg = "SKIPPING BATCH: NOT ENOUGH DATA ({} < {})"
                     # print(msg.format(batch[0].numel(), expected_numel))
                     continue
-            print(i, end="> ")
+            # print(i, end="> ")
+            print(i)
             loss, acc, download, upload = model(batch)
             # print(time.time() - batch_time)
             if np.any(np.isnan(loss)):
@@ -369,6 +371,8 @@ if __name__ == "__main__":
     # reproducibility
     np.random.seed(args.seed)
     torch.random.manual_seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     # model class and config

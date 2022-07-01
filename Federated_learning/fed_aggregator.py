@@ -15,7 +15,7 @@ import ctypes
 import torch.multiprocessing as multiprocessing
 
 import fed_worker as worker
-from utils import get_param_vec, set_param_vec, get_grad, _topk, _sampling, clip_grad
+from utils import get_param_vec, set_param_vec, get_grad, _topk, _sampling, clip_grad, _nips
 
 # gets multipled by 1/participation. See use below
 DEQUE_MAXLEN_MULT = 10
@@ -127,7 +127,7 @@ class FedModel:
             # w_e, w_e.abs(), w_r.abs(), C
             shape = (num_clients, args.grad_size*3+1)
         elif args.mode in ["local_topk", "true_topk", "fedavg",
-                           "uncompressed"]:
+                           "uncompressed", "nips"]:
             shape = (num_clients, args.grad_size)
 
         # don't make these arrays unless we need them
@@ -329,7 +329,7 @@ class FedModel:
         elif self.args.mode == "sampling":
             shape = (self.args.grad_size*3+1,)
         elif self.args.mode in ["uncompressed", "true_topk", "local_topk",
-                                "fedavg"]:
+                                "fedavg", "nips"]:
             shape = (self.args.grad_size,)
 
         # get results from each process (which have already been aggregated
@@ -429,7 +429,7 @@ class FedOptimizer(torch.optim.Optimizer):
         if args.mode == "sketch":
             shape = (args.num_rows, args.num_cols)
         elif args.mode in ["true_topk", "local_topk", "sampling", "fedavg",
-                           "uncompressed"]:
+                           "uncompressed", "nips"]:
             shape = (args.grad_size,)
 
         device = args.device
@@ -503,6 +503,7 @@ def get_server_update(gradient, Vvelocity, Verror, args, lr):
               "sampling": _server_helper_sampling,
               "fedavg": _server_helper_fedavg,
               "uncompressed": _server_helper_uncompressed,
+              "nips": _server_helper_nips
               }[args.mode]
 
     weight_update, new_Vvelocity, new_Verror = helper(
@@ -626,6 +627,17 @@ def _server_helper_sampling(sampling_grad, Vvelocity, Verror, args, lr):
     update = Vvelocity
 
     return update * lr, Vvelocity, Verror
+
+def _server_helper_nips(grad, Vvelocity, Verror, args, lr):
+    assert args.error_type in ["local", "none"]
+
+    rho = args.virtual_momentum
+    torch.add(grad, Vvelocity, alpha=rho, out=Vvelocity)
+
+    update = Vvelocity
+
+    return update * lr, Vvelocity, Verror
+
 
 
 def _server_helper_sketched(sketched_grad, Vvelocity, Verror, args, lr):
