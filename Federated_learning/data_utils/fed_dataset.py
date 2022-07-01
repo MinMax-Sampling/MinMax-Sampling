@@ -28,31 +28,31 @@ class FedDataset(torch.utils.data.Dataset):
         print("!!", len(self))
         if self.do_iid:
             self.iid_shuffle = np.random.permutation(len(self))
-#        elif self.type == 'train':
-#            type_sum = [5000 * i for i in range(10)]
-#            permuted_data = []
-#            N = len(self)
-#            print(N, num_clients)
-#            data_per_client = N // num_clients
-#            for i in range(num_clients):
-#                perm = []
-#                u = N // num_clients
-#                v = i // (num_clients // 10)
-#                major_num = u // 25 * 16
-#                minor_num = u // 25 * 1
-#                for k in range(10):
-#                    if (k == v):
-#                        perm.extend(
-#                            np.arange(type_sum[k], type_sum[k] + major_num))
-#                        type_sum[k] += major_num
-#                    else:
-#                        perm.extend(
-#                            np.arange(type_sum[k], type_sum[k] + minor_num))
-#                        type_sum[k] += minor_num
-#                permuted_data.extend(perm)
-#
-#            print(len(permuted_data), len(set(permuted_data)))
-#            self.niid_shuffle = permuted_data
+        elif self.type == 'train':
+            type_sum = [5000 * i for i in range(10)]
+            permuted_data = []
+            N = len(self)
+            print(N, num_clients)
+            data_per_client = N // num_clients
+            for i in range(num_clients):
+                perm = []
+                u = N // num_clients
+                v = i // (num_clients // 10)
+                major_num = u // 25 * 16
+                minor_num = u // 25 * 1
+                for k in range(10):
+                    if (k == v):
+                        perm.extend(
+                            np.arange(type_sum[k], type_sum[k] + major_num))
+                        type_sum[k] += major_num
+                    else:
+                        perm.extend(
+                            np.arange(type_sum[k], type_sum[k] + minor_num))
+                        type_sum[k] += minor_num
+                permuted_data.extend(perm)
+
+            print(len(permuted_data), len(set(permuted_data)))
+            self.niid_shuffle = permuted_data
 
     @property
     def data_per_client(self):
@@ -100,8 +100,8 @@ class FedDataset(torch.utils.data.Dataset):
                 # but when iid, self.iid_shuffle[idx] determines which
                 # image/target we actually return
                 idx = self.iid_shuffle[idx]
-#            else:
-#                idx = self.niid_shuffle[idx]
+            else:
+                idx = self.niid_shuffle[idx]
             cumsum = np.cumsum(self.images_per_client)
             client_id = np.searchsorted(cumsum, idx, side="right")
             cumsum = np.hstack([[0], cumsum[:-1]])
